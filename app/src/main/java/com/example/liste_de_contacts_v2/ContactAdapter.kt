@@ -1,48 +1,54 @@
 package com.example.liste_de_contacts_v2
 
-import android.content.Context
 import android.net.Uri
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ArrayAdapter
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.recyclerview.widget.RecyclerView
 
-/**
- * Adaptateur personnalisé pour afficher la liste de contacts dans la ListView.
- */
 class ContactAdapter(
-    context: Context,
-    private val contacts: List<Contact>
-) : ArrayAdapter<Contact>(context, 0, contacts) {
+    private var contacts: List<Contact>,
+    private val onContactClick: (Contact) -> Unit
+) : RecyclerView.Adapter<ContactAdapter.ContactViewHolder>() {
 
-    override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-        val view = convertView ?: LayoutInflater.from(context).inflate(
-            R.layout.item_contact,
-            parent,
-            false
-        )
+    class ContactViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val tvName: TextView = view.findViewById(R.id.tvContactName)
+        val tvPhone: TextView = view.findViewById(R.id.tvContactPhone)
+        val ivPhoto: ImageView = view.findViewById(R.id.ivContactPhoto)
+    }
 
-        val contact = getItem(position) ?: return view
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ContactViewHolder {
+        val view = LayoutInflater.from(parent.context)
+            .inflate(R.layout.item_contact, parent, false)
+        return ContactViewHolder(view)
+    }
 
-        val ivPhoto = view.findViewById<ImageView>(R.id.ivContactPhoto)
-        val tvName = view.findViewById<TextView>(R.id.tvContactName)
-        val tvPhone = view.findViewById<TextView>(R.id.tvContactPhone)
-
-        tvName.text = "${contact.prenom} ${contact.nom}"
-        tvPhone.text = contact.telephone
+    override fun onBindViewHolder(holder: ContactViewHolder, position: Int) {
+        val contact = contacts[position]
+        holder.tvName.text = "${contact.nom} ${contact.prenom}"
+        holder.tvPhone.text = contact.telephone
 
         if (!contact.imageUri.isNullOrEmpty()) {
             try {
-                ivPhoto.setImageURI(Uri.parse(contact.imageUri))
+                holder.ivPhoto.setImageURI(Uri.parse(contact.imageUri))
             } catch (e: Exception) {
-                ivPhoto.setImageResource(R.drawable.ic_avatar)
+                holder.ivPhoto.setImageResource(R.drawable.ic_avatar)
             }
         } else {
-            ivPhoto.setImageResource(R.drawable.ic_avatar)
+            holder.ivPhoto.setImageResource(R.drawable.ic_avatar)
         }
 
-        return view
+        holder.itemView.setOnClickListener {
+            onContactClick(contact)
+        }
+    }
+
+    override fun getItemCount(): Int = contacts.size
+
+    fun updateData(newContacts: List<Contact>) {
+        contacts = newContacts
+        notifyDataSetChanged()
     }
 }

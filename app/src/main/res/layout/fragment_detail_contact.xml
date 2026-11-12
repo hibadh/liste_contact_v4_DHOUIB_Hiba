@@ -1,13 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/detailMain"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg_main"
-    android:orientation="vertical"
-    tools:context=".DetailActivity">
+    android:orientation="vertical">
 
     <!-- Header bar "Détail du contact" -->
     <LinearLayout
@@ -66,7 +63,6 @@
             android:paddingTop="16dp"
             android:paddingBottom="24dp">
 
-            <!-- Photo avec badge appareil photo -->
             <RelativeLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -92,10 +88,8 @@
                     android:src="@drawable/ic_camera"
                     android:contentDescription="Changer photo"
                     app:tint="@android:color/white" />
-
             </RelativeLayout>
 
-            <!-- Label & Input : Nom -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -116,7 +110,6 @@
                 android:textColor="@color/text_dark"
                 android:textSize="16sp" />
 
-            <!-- Label & Input : Prénom -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -137,7 +130,6 @@
                 android:textColor="@color/text_dark"
                 android:textSize="16sp" />
 
-            <!-- Label & Input : Téléphone + Bouton Appeler -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -176,7 +168,6 @@
                     app:tint="@android:color/white" />
             </LinearLayout>
 
-            <!-- Label & Input : E-mail + Bouton Envoyer E-mail -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -215,7 +206,58 @@
                     app:tint="@android:color/white" />
             </LinearLayout>
 
-            <!-- Boutons d'action Photo (Galerie & Caméra) -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="Latitude"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/etLatitude"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/edit_text_bg"
+                android:inputType="numberDecimal|numberSigned"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:textColor="@color/text_dark"
+                android:textSize="16sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="Longitude"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/etLongitude"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/edit_text_bg"
+                android:inputType="numberDecimal|numberSigned"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:textColor="@color/text_dark"
+                android:textSize="16sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnMap"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginTop="16dp"
+                android:backgroundTint="@color/purple_header"
+                android:text="Voir sur la carte"
+                android:textColor="@android:color/white"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                app:cornerRadius="12dp" />
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -256,7 +298,6 @@
                     app:iconTint="@android:color/white" />
             </LinearLayout>
 
-            <!-- Bouton Enregistrer -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSave"
                 android:layout_width="match_parent"
@@ -264,6 +305,18 @@
                 android:layout_marginTop="16dp"
                 android:backgroundTint="@color/green_accent"
                 android:text="Enregistrer"
+                android:textColor="@android:color/white"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                app:cornerRadius="12dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCancel"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginTop="8dp"
+                android:backgroundTint="@color/text_secondary"
+                android:text="Annuler"
                 android:textColor="@android:color/white"
                 android:textSize="16sp"
                 android:textStyle="bold"

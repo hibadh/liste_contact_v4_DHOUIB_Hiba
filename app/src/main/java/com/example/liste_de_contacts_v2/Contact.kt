@@ -12,5 +12,7 @@ data class Contact(
     var prenom: String,
     var telephone: String,
     var email: String,
-    var imageUri: String? = null // Stocke l'URI sous forme de String (ex: content://... ou android.resource://...)
+    var imageUri: String? = null,
+    var latitude: Double? = null,
+    var longitude: Double? = null
 ) : Serializable

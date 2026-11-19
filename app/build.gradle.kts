@@ -40,6 +40,7 @@ dependencies {
     implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.recyclerview)
+    implementation(libs.androidx.preference.ktx)
     implementation(libs.play.services.maps)
     implementation(libs.material)
     testImplementation(libs.junit)

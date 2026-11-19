@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -15,8 +16,12 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.lifecycleScope
+import com.example.liste_de_contacts_v2.data.PreferencesManager
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 
@@ -40,15 +45,13 @@ class DetailContactFragment : Fragment() {
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            try {
-                requireContext().contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            } catch (_: Exception) {
+            val savedUri = copyUriToInternalStorage(uri)
+            if (savedUri != null) {
+                currentImageUri = savedUri.toString()
+                ivPhoto.setImageURI(savedUri)
+            } else {
+                Toast.makeText(requireContext(), "Erreur lors de la copie de l'image", Toast.LENGTH_SHORT).show()
             }
-            currentImageUri = uri.toString()
-            ivPhoto.setImageURI(uri)
         } else {
             Toast.makeText(requireContext(), "Sélection d'image annulée", Toast.LENGTH_SHORT).show()
         }
@@ -58,12 +61,12 @@ class DetailContactFragment : Fragment() {
         ActivityResultContracts.TakePicturePreview()
     ) { bitmap: Bitmap? ->
         if (bitmap != null) {
-            val savedUri = saveBitmapToCache(bitmap)
+            val savedUri = saveBitmapToInternalStorage(bitmap)
             if (savedUri != null) {
                 currentImageUri = savedUri.toString()
                 ivPhoto.setImageBitmap(bitmap)
             } else {
-                Toast.makeText(requireContext(), "Erreur lors de la sauvegarde de l'image", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), "Erreur lors de la sauvegarde de la photo", Toast.LENGTH_SHORT).show()
             }
         } else {
             Toast.makeText(requireContext(), "Prise de photo annulée", Toast.LENGTH_SHORT).show()
@@ -80,23 +83,8 @@ class DetailContactFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        val contactId = arguments?.getInt("contact_id", -1) ?: -1
-        isNewContact = contactId == -1
-
-        if (isNewContact) {
-            val newId = viewModel.getNextId()
-            contact = Contact(newId, "", "", "", "")
-        } else {
-            contact = viewModel.getContactById(contactId)?.copy()
-        }
-
-        if (contact == null) {
-            Toast.makeText(requireContext(), "Erreur : Contact non trouvé", Toast.LENGTH_SHORT).show()
-            parentFragmentManager.popBackStack()
-            return
-        }
-
-        currentImageUri = contact?.imageUri
+        val contactId = arguments?.getLong("contact_id", -1L) ?: -1L
+        isNewContact = contactId == -1L
 
         ivPhoto = view.findViewById(R.id.ivDetailPhoto)
         etNom = view.findViewById(R.id.etNom)
@@ -105,7 +93,9 @@ class DetailContactFragment : Fragment() {
         etEmail = view.findViewById(R.id.etEmail)
         etLatitude = view.findViewById(R.id.etLatitude)
         etLongitude = view.findViewById(R.id.etLongitude)
-        
+
+        applyUserPreferences()
+
         val tvDetailTitle = view.findViewById<TextView>(R.id.tvDetailTitle)
         val btnBack = view.findViewById<ImageButton>(R.id.btnBack)
         val btnDelete = view.findViewById<ImageButton>(R.id.btnDeleteContact)
@@ -120,59 +110,48 @@ class DetailContactFragment : Fragment() {
 
         tvDetailTitle.text = if (isNewContact) "Nouveau contact" else "Détail du contact"
 
-        btnBack.setOnClickListener {
-            parentFragmentManager.popBackStack()
-        }
-        
-        btnCancel.setOnClickListener {
-            parentFragmentManager.popBackStack()
+        if (isNewContact) {
+            contact = Contact(id = 0L, nom = "", prenom = "", telephone = "")
+            btnDelete.visibility = View.GONE
+            bindContactData()
+        } else {
+            lifecycleScope.launch {
+                val loadedContact = viewModel.getContactById(contactId)
+                if (loadedContact == null) {
+                    Toast.makeText(requireContext(), "Erreur : Contact introuvable", Toast.LENGTH_SHORT).show()
+                    parentFragmentManager.popBackStack()
+                    return@launch
+                }
+                contact = loadedContact.copy()
+                currentImageUri = contact?.photoUri
+                bindContactData()
+            }
         }
 
+        btnBack.setOnClickListener { parentFragmentManager.popBackStack() }
+        btnCancel.setOnClickListener { parentFragmentManager.popBackStack() }
+
         btnDelete.setOnClickListener {
-            if (!isNewContact) {
-                viewModel.deleteContact(contact!!.id)
-                parentFragmentManager.popBackStack()
+            if (!isNewContact && contact != null) {
+                AlertDialog.Builder(requireContext())
+                    .setTitle("Confirmation de suppression")
+                    .setMessage("Voulez-vous vraiment supprimer le contact ${contact?.nom} ${contact?.prenom} ?")
+                    .setPositiveButton("Supprimer") { _, _ ->
+                        viewModel.deleteContact(contact!!.id) {
+                            Toast.makeText(requireContext(), "Contact supprimé", Toast.LENGTH_SHORT).show()
+                            parentFragmentManager.popBackStack()
+                        }
+                    }
+                    .setNegativeButton("Annuler", null)
+                    .show()
             } else {
                 parentFragmentManager.popBackStack()
             }
         }
 
-        ivCameraBadge.setOnClickListener {
-            try {
-                cameraLauncher.launch(null)
-            } catch (_: Exception) {
-                Toast.makeText(requireContext(), "Impossible d'ouvrir l'appareil photo", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        etNom.setText(contact?.nom)
-        etPrenom.setText(contact?.prenom)
-        etTelephone.setText(contact?.telephone)
-        etEmail.setText(contact?.email)
-        etLatitude.setText(contact?.latitude?.toString() ?: "")
-        etLongitude.setText(contact?.longitude?.toString() ?: "")
-
-        if (!contact?.imageUri.isNullOrEmpty()) {
-            try {
-                ivPhoto.setImageURI(Uri.parse(contact?.imageUri))
-            } catch (_: Exception) {
-                ivPhoto.setImageResource(R.drawable.ic_avatar)
-            }
-        } else {
-            ivPhoto.setImageResource(R.drawable.ic_avatar)
-        }
-
-        btnGallery.setOnClickListener {
-            galleryLauncher.launch("image/*")
-        }
-
-        btnCamera.setOnClickListener {
-            try {
-                cameraLauncher.launch(null)
-            } catch (_: Exception) {
-                Toast.makeText(requireContext(), "Impossible d'ouvrir l'appareil photo", Toast.LENGTH_SHORT).show()
-            }
-        }
+        ivCameraBadge.setOnClickListener { launchCamera() }
+        btnCamera.setOnClickListener { launchCamera() }
+        btnGallery.setOnClickListener { galleryLauncher.launch("image/*") }
 
         btnCall.setOnClickListener {
             val phone = etTelephone.text?.toString()?.trim() ?: ""
@@ -201,36 +180,31 @@ class DetailContactFragment : Fragment() {
                 etEmail.error = "Veuillez entrer une adresse e-mail"
             }
         }
-        
+
         btnMap.setOnClickListener {
-            val latText = etLatitude.text.toString()
-            val lngText = etLongitude.text.toString()
+            val latText = etLatitude.text.toString().trim()
+            val lngText = etLongitude.text.toString().trim()
             val lat = latText.toDoubleOrNull()
             val lng = lngText.toDoubleOrNull()
-            
+
             if (lat == null || lng == null) {
-                Toast.makeText(requireContext(), "Coordonnées invalides ou absentes", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), "Coordonnées GPS absentes ou invalides", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             if (lat < -90.0 || lat > 90.0) {
-                Toast.makeText(requireContext(), "Latitude doit être entre -90 et 90", Toast.LENGTH_SHORT).show()
+                etLatitude.error = "Latitude doit être entre -90 et 90"
                 return@setOnClickListener
             }
             if (lng < -180.0 || lng > 180.0) {
-                Toast.makeText(requireContext(), "Longitude doit être entre -180 et 180", Toast.LENGTH_SHORT).show()
+                etLongitude.error = "Longitude doit être entre -180 et 180"
                 return@setOnClickListener
             }
 
-            // Always update current working object before passing to next fragment to not lose them
-            contact?.latitude = lat
-            contact?.longitude = lng
-            
             val fragment = CarteContactFragment().apply {
                 arguments = Bundle().apply {
-                    putInt("contact_id", contact!!.id)
                     putDouble("latitude", lat)
                     putDouble("longitude", lng)
-                    putString("nom", contact!!.nom)
+                    putString("nom", "${etNom.text} ${etPrenom.text}")
                 }
             }
             parentFragmentManager.beginTransaction()
@@ -240,80 +214,138 @@ class DetailContactFragment : Fragment() {
         }
 
         btnSave.setOnClickListener {
-            val nom = etNom.text?.toString()?.trim() ?: ""
-            val prenom = etPrenom.text?.toString()?.trim() ?: ""
-            val phone = etTelephone.text?.toString()?.trim() ?: ""
-            val email = etEmail.text?.toString()?.trim() ?: ""
-            
-            val latText = etLatitude.text?.toString()?.trim() ?: ""
-            val lngText = etLongitude.text?.toString()?.trim() ?: ""
-            
-            var lat: Double? = null
-            var lng: Double? = null
-
-            if (nom.isEmpty()) {
-                etNom.error = "Le nom est obligatoire"
-                return@setOnClickListener
-            }
-            if (prenom.isEmpty()) {
-                etPrenom.error = "Le prénom est obligatoire"
-                return@setOnClickListener
-            }
-            if (phone.isEmpty()) {
-                etTelephone.error = "Le numéro de téléphone est obligatoire"
-                return@setOnClickListener
-            }
-            
-            if (latText.isNotEmpty()) {
-                lat = latText.toDoubleOrNull()
-                if (lat == null) {
-                    etLatitude.error = "Valeur non numérique"
-                    return@setOnClickListener
-                }
-                if (lat < -90.0 || lat > 90.0) {
-                    etLatitude.error = "Doit être entre -90 et 90"
-                    return@setOnClickListener
-                }
-            }
-            
-            if (lngText.isNotEmpty()) {
-                lng = lngText.toDoubleOrNull()
-                if (lng == null) {
-                    etLongitude.error = "Valeur non numérique"
-                    return@setOnClickListener
-                }
-                if (lng < -180.0 || lng > 180.0) {
-                    etLongitude.error = "Doit être entre -180 et 180"
-                    return@setOnClickListener
-                }
-            }
-            
-            if ((lat != null && lng == null) || (lat == null && lng != null)) {
-                Toast.makeText(requireContext(), "Veuillez renseigner les deux coordonnées", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            contact?.nom = nom
-            contact?.prenom = prenom
-            contact?.telephone = phone
-            contact?.email = email
-            contact?.latitude = lat
-            contact?.longitude = lng
-            contact?.imageUri = currentImageUri
-
-            if (isNewContact) {
-                viewModel.addContact(contact!!)
-            } else {
-                viewModel.updateContact(contact!!)
-            }
-            
-            parentFragmentManager.popBackStack()
+            saveContact()
         }
     }
 
-    private fun saveBitmapToCache(bitmap: Bitmap): Uri? {
+    private fun applyUserPreferences() {
+        val prefs = PreferencesManager(requireContext())
+        val sizeSp = prefs.fontSizeSp
+        val color = prefs.textColor
+
+        etNom.setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp)
+        etNom.setTextColor(color)
+
+        etPrenom.setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp)
+        etPrenom.setTextColor(color)
+
+        etTelephone.setTextSize(TypedValue.COMPLEX_UNIT_SP, (sizeSp - 2f).coerceAtLeast(12f))
+    }
+
+    private fun bindContactData() {
+        val c = contact ?: return
+        etNom.setText(c.nom)
+        etPrenom.setText(c.prenom)
+        etTelephone.setText(c.telephone)
+        etEmail.setText(c.email ?: "")
+        etLatitude.setText(c.latitude?.toString() ?: "")
+        etLongitude.setText(c.longitude?.toString() ?: "")
+
+        val uriStr = currentImageUri ?: c.photoUri
+        if (!uriStr.isNullOrEmpty()) {
+            try {
+                ivPhoto.setImageURI(Uri.parse(uriStr))
+            } catch (_: Exception) {
+                ivPhoto.setImageResource(R.drawable.ic_avatar)
+            }
+        } else {
+            ivPhoto.setImageResource(R.drawable.ic_avatar)
+        }
+    }
+
+    private fun launchCamera() {
+        try {
+            cameraLauncher.launch(null)
+        } catch (_: Exception) {
+            Toast.makeText(requireContext(), "Impossible d'ouvrir l'appareil photo", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun saveContact() {
+        val nom = etNom.text?.toString()?.trim() ?: ""
+        val prenom = etPrenom.text?.toString()?.trim() ?: ""
+        val phone = etTelephone.text?.toString()?.trim() ?: ""
+        val email = etEmail.text?.toString()?.trim() ?: ""
+
+        val latText = etLatitude.text?.toString()?.trim() ?: ""
+        val lngText = etLongitude.text?.toString()?.trim() ?: ""
+
+        var lat: Double? = null
+        var lng: Double? = null
+
+        if (nom.isEmpty()) {
+            etNom.error = "Le nom est obligatoire"
+            return
+        }
+        if (prenom.isEmpty()) {
+            etPrenom.error = "Le prénom est obligatoire"
+            return
+        }
+        if (phone.isEmpty()) {
+            etTelephone.error = "Le numéro de téléphone est obligatoire"
+            return
+        }
+
+        if (latText.isNotEmpty()) {
+            lat = latText.toDoubleOrNull()
+            if (lat == null || lat < -90.0 || lat > 90.0) {
+                etLatitude.error = "Latitude valide entre -90 et 90 requise"
+                return
+            }
+        }
+
+        if (lngText.isNotEmpty()) {
+            lng = lngText.toDoubleOrNull()
+            if (lng == null || lng < -180.0 || lng > 180.0) {
+                etLongitude.error = "Longitude valide entre -180 et 180 requise"
+                return
+            }
+        }
+
+        if ((lat != null && lng == null) || (lat == null && lng != null)) {
+            Toast.makeText(requireContext(), "Veuillez renseigner la latitude ET la longitude", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val c = contact ?: Contact(nom = nom, prenom = prenom, telephone = phone)
+        c.nom = nom
+        c.prenom = prenom
+        c.telephone = phone
+        c.email = if (email.isNotEmpty()) email else null
+        c.latitude = lat
+        c.longitude = lng
+        c.photoUri = currentImageUri
+
+        if (isNewContact || c.id == 0L) {
+            viewModel.addContact(c) {
+                Toast.makeText(requireContext(), "Contact enregistré", Toast.LENGTH_SHORT).show()
+                parentFragmentManager.popBackStack()
+            }
+        } else {
+            viewModel.updateContact(c) {
+                Toast.makeText(requireContext(), "Contact mis à jour", Toast.LENGTH_SHORT).show()
+                parentFragmentManager.popBackStack()
+            }
+        }
+    }
+
+    private fun copyUriToInternalStorage(uri: Uri): Uri? {
         return try {
-            val file = File(requireContext().cacheDir, "photo_${System.currentTimeMillis()}.jpg")
+            val inputStream = requireContext().contentResolver.openInputStream(uri) ?: return null
+            val file = File(requireContext().filesDir, "photo_${System.currentTimeMillis()}.jpg")
+            FileOutputStream(file).use { outputStream ->
+                inputStream.copyTo(outputStream)
+            }
+            Uri.fromFile(file)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    private fun saveBitmapToInternalStorage(bitmap: Bitmap): Uri? {
+        return try {
+            val file = File(requireContext().filesDir, "photo_${System.currentTimeMillis()}.jpg")
             FileOutputStream(file).use { out ->
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
             }

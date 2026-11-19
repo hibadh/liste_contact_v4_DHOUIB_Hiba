@@ -1,5 +1,8 @@
 package com.example.liste_de_contacts_v2
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -9,16 +12,20 @@ import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.TextView
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.example.liste_de_contacts_v2.data.PreferencesManager
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 
 class ListeContactsFragment : Fragment() {
 
     private val viewModel: ContactViewModel by activityViewModels()
     private lateinit var adapter: ContactAdapter
-    private var allContacts: List<Contact> = emptyList()
+    private lateinit var etSearch: EditText
+    private lateinit var tvEmptyState: TextView
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -31,59 +38,79 @@ class ListeContactsFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         val recyclerView = view.findViewById<RecyclerView>(R.id.recyclerViewContacts)
-        val etSearch = view.findViewById<EditText>(R.id.etSearch)
-        val tvEmptyState = view.findViewById<TextView>(R.id.tvEmptyState)
+        etSearch = view.findViewById(R.id.etSearch)
+        tvEmptyState = view.findViewById(R.id.tvEmptyState)
         val btnAddHeader = view.findViewById<ImageButton>(R.id.btnAddContactHeader)
+        val btnSettings = view.findViewById<ImageButton>(R.id.btnSettings)
+        val fabAddContact = view.findViewById<FloatingActionButton>(R.id.fabAddContact)
 
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
-        adapter = ContactAdapter(emptyList()) { contact ->
-            openDetail(contact.id)
-        }
+        adapter = ContactAdapter(
+            contacts = emptyList(),
+            onContactClick = { contact -> openDetail(contact.id) },
+            onCallClick = { contact -> makeDirectCall(contact) }
+        )
         recyclerView.adapter = adapter
 
         viewModel.contacts.observe(viewLifecycleOwner) { contacts ->
-            allContacts = contacts
-            filterContacts(etSearch.text.toString(), tvEmptyState)
+            adapter.updateData(contacts)
+            tvEmptyState.visibility = if (contacts.isEmpty()) View.VISIBLE else View.GONE
         }
 
         etSearch.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                filterContacts(s.toString(), tvEmptyState)
+                viewModel.searchContacts(s?.toString() ?: "")
             }
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        btnAddHeader.setOnClickListener {
-            openDetail(null)
+        btnAddHeader.setOnClickListener { openDetail(null) }
+        fabAddContact.setOnClickListener { openDetail(null) }
+
+        btnSettings.setOnClickListener {
+            parentFragmentManager.beginTransaction()
+                .replace(R.id.fragment_container, ParametresFragment())
+                .addToBackStack(null)
+                .commit()
         }
     }
 
-    private fun filterContacts(query: String, tvEmptyState: TextView) {
-        val filteredList = if (query.isEmpty()) {
-            allContacts
-        } else {
-            allContacts.filter {
-                it.nom.contains(query, ignoreCase = true) ||
-                it.prenom.contains(query, ignoreCase = true) ||
-                it.telephone.contains(query, ignoreCase = true)
+    override fun onResume() {
+        super.onResume()
+        // Chargement immédiat des préférences au retour sur le fragment
+        applyUserPreferences()
+        viewModel.loadContacts()
+    }
+
+    private fun applyUserPreferences() {
+        val prefs = PreferencesManager(requireContext())
+        adapter.updatePreferences(
+            fontSizeSp = prefs.fontSizeSp,
+            textColor = prefs.textColor,
+            isCallEnabled = prefs.isCallFromListEnabled
+        )
+    }
+
+    private fun makeDirectCall(contact: Contact) {
+        val phone = contact.telephone.trim()
+        if (phone.isNotEmpty()) {
+            val callIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
+            try {
+                startActivity(callIntent)
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(requireContext(), "Aucune application de téléphone disponible", Toast.LENGTH_SHORT).show()
             }
-        }
-
-        adapter.updateData(filteredList)
-
-        if (filteredList.isEmpty()) {
-            tvEmptyState.visibility = View.VISIBLE
         } else {
-            tvEmptyState.visibility = View.GONE
+            Toast.makeText(requireContext(), "Numéro de téléphone vide", Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun openDetail(contactId: Int?) {
+    private fun openDetail(contactId: Long?) {
         val fragment = DetailContactFragment().apply {
             arguments = Bundle().apply {
-                if (contactId != null) {
-                    putInt("contact_id", contactId)
+                if (contactId != null && contactId != 0L) {
+                    putLong("contact_id", contactId)
                 }
             }
         }
